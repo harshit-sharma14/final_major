@@ -54,34 +54,67 @@ def train_dp_federated() -> Dict[str, object]:
     global_model = DiseasePredictionModel()
     criterion = nn.BCEWithLogitsLoss()
 
-    # ✅ Initialize tracking lists
+    # Tracking lists
     rounds: List[int] = []
     accuracies: List[float] = []
     losses: List[float] = []
     epsilons: List[float] = []
 
-    for _ in range(GLOBAL_ROUNDS):
-        client_state_dicts: List[Dict[str, torch.Tensor]] = []
-        client_data_sizes: List[int] = []
-        round_epsilons: List[float] = []
+    # -------------------------------------------------
+    # ✅ Initialize clients ONCE (persistent objects)
+    # -------------------------------------------------
+    client_models = []
+    client_optimizers = []
+    client_privacy_engines = []
+    client_loaders = []
+    client_data_sizes = []
 
-        for client_subset in client_subsets:
-            local_model = DiseasePredictionModel()
-            local_model.load_state_dict(copy.deepcopy(global_model.state_dict()))
+    for client_subset in client_subsets:
+        local_model = DiseasePredictionModel()
+        local_model.load_state_dict(copy.deepcopy(global_model.state_dict()))
 
-            optimizer = optim.SGD(local_model.parameters(), lr=LEARNING_RATE)
-            train_loader = get_dataloader(client_subset)
+        optimizer = optim.SGD(local_model.parameters(), lr=LEARNING_RATE)
+        train_loader = get_dataloader(client_subset)
 
-            privacy_engine = PrivacyEngine(accountant="rdp")
+        privacy_engine = PrivacyEngine(accountant="rdp")
 
-            local_model, optimizer, train_loader = privacy_engine.make_private(
-                module=local_model,
-                optimizer=optimizer,
-                data_loader=train_loader,
-                noise_multiplier=NOISE_MULTIPLIER,
-                max_grad_norm=CLIP_NORM,
+        local_model, optimizer, train_loader = privacy_engine.make_private(
+            module=local_model,
+            optimizer=optimizer,
+            data_loader=train_loader,
+            noise_multiplier=NOISE_MULTIPLIER,
+            max_grad_norm=CLIP_NORM,
+        )
+
+        client_models.append(local_model)
+        client_optimizers.append(optimizer)
+        client_privacy_engines.append(privacy_engine)
+        client_loaders.append(train_loader)
+        client_data_sizes.append(len(client_subset))
+
+    # -------------------------------------------------
+    # ✅ Global training rounds
+    # -------------------------------------------------
+    for round_idx in range(GLOBAL_ROUNDS):
+        client_state_dicts = []
+        round_epsilons = []
+
+        for i in range(len(client_models)):
+            local_model = client_models[i]
+            optimizer = client_optimizers[i]
+            train_loader = client_loaders[i]
+            privacy_engine = client_privacy_engines[i]
+
+            # 🔄 Sync global model → client
+            local_model.load_state_dict(
+                {
+                    f"_module.{k}": v
+                    for k, v in global_model.state_dict().items()
+                },
+                strict=False,
             )
 
+            # Local training
             for _ in range(LOCAL_EPOCHS):
                 local_model.train()
                 for inputs, targets in train_loader:
@@ -95,8 +128,8 @@ def train_dp_federated() -> Dict[str, object]:
             round_epsilons.append(epsilon)
 
             client_state_dicts.append(copy.deepcopy(local_model.state_dict()))
-            client_data_sizes.append(len(client_subset))
 
+        # Federated averaging
         aggregated_state = fedavg(client_state_dicts, client_data_sizes)
 
         clean_state = {
@@ -106,14 +139,12 @@ def train_dp_federated() -> Dict[str, object]:
 
         global_model.load_state_dict(clean_state)
 
-        # ✅ Evaluate after each round
+        # Evaluate global model
         metrics = _evaluate(global_model, test_loader)
 
-        round_number = len(rounds) + 1
-        rounds.append(round_number)
+        rounds.append(round_idx + 1)
         accuracies.append(metrics["accuracy"])
         losses.append(metrics["loss"])
-
         epsilons.append(sum(round_epsilons) / len(round_epsilons))
 
     return {
