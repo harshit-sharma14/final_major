@@ -125,7 +125,7 @@ Privacy tracking:
 
 ### 📈 Accuracy Comparison
 
-![Accuracy Comparison](assets/model_accuracy_comparasion.png)
+![Accuracy Comparison](assets/model_accuracy_comparsion.png)
 
 ### 🔍 Observations
 
