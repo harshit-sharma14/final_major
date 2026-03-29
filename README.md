@@ -24,7 +24,7 @@ This project proposes a **privacy-preserving federated learning framework** that
 
 ## 🏗️ System Architecture
 
-![Architecture](assets/architecture.png)
+![Architecture](assets/architecture.jpg)
 
 The system follows a **client-server federated learning setup**:
 
@@ -125,7 +125,7 @@ Privacy tracking:
 
 ### 📈 Accuracy Comparison
 
-![Accuracy Comparison](assets/accuracy.png)
+![Accuracy Comparison](assets/model_accuracy_comparasion.png)
 
 ### 🔍 Observations
 
@@ -137,7 +137,7 @@ Privacy tracking:
 
 ## 🔐 Privacy–Utility Trade-off
 
-![Privacy Tradeoff](assets/privacy_tradeoff.png)
+![Privacy Tradeoff](assets/privacy_utility_tradeoff.png)
 
 ### 📊 Key Insights
 
